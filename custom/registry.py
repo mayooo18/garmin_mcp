@@ -1,5 +1,5 @@
 from custom.profile.tools import (
-    get_user_profile,
+    get_fitness_preferences,
     save_user_preference,
     reset_user_profile,
 )
@@ -13,7 +13,7 @@ def register_custom_tools(mcp):
     Registers all custom tools onto garmin_mcp's existing server instance.
     Call this once at startup before the server begins serving requests.
     """
-    mcp.tool()(get_user_profile)
+    mcp.tool()(get_fitness_preferences)
     mcp.tool()(save_user_preference)
     mcp.tool()(reset_user_profile)
     mcp.tool()(recommend_daily_calories)

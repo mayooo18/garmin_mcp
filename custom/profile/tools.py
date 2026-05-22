@@ -1,7 +1,7 @@
 from custom.profile.store import load_profile, save_profile
 
 
-async def get_user_profile() -> dict:
+async def get_fitness_preferences() -> dict:
     """
     Returns all stored user preferences.
     Claude should call this at the start of any fitness question
