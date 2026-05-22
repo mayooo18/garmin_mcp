@@ -1,44 +1,38 @@
 # Use Python 3.12 slim image for smaller size
 FROM python:3.12-slim
 
-# Note: .dockerignore is symlinked to .gitignore for unified exclusion rules
-
-# Set working directory
 WORKDIR /app
 
-# Install uv for faster dependency management
-# https://github.com/astral-sh/uv
+# Install uv
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
-# Set environment variables
+# Environment variables
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     UV_SYSTEM_PYTHON=1
 
-# Copy dependency files and README first for better layer caching
+# Copy dependency files
 COPY pyproject.toml README.md ./
 
-# Copy the application source code (needed for editable install)
+# Copy source code
 COPY src/ ./src/
 
-# Install dependencies using uv
+# Install garmin_mcp dependencies
 RUN uv pip install -e .
 
-# Copy test files (optional, for testing in container)
-COPY tests/ ./tests/
-COPY pytest.ini ./
+# Install SSE wrapper dependencies
+RUN uv pip install starlette uvicorn python-dotenv
+
+# Copy your custom logic and SSE wrapper
+COPY custom/ ./custom/
+COPY sse_wrapper.py ./
 
 # Create directory for Garmin tokens
 RUN mkdir -p /root/.garminconnect && \
     chmod 700 /root/.garminconnect
 
-# Expose the application (if needed for network communication)
-# Note: MCP servers typically communicate via stdio, so no port exposure is usually needed
-# EXPOSE 8000
+# Expose port for SSE
+EXPOSE 8000
 
-# Set the entrypoint to run the MCP server
-ENTRYPOINT ["garmin-mcp"]
-
-# Health check (optional - adjust based on your needs)
-# HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-#   CMD python -c "import sys; sys.exit(0)"
+# Run the SSE wrapper instead of stdio garmin-mcp
+CMD ["python3", "sse_wrapper.py"]
