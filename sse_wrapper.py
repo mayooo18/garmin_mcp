@@ -16,7 +16,7 @@ garmin_tokens = os.environ.get("GARMIN_TOKENS")
 if garmin_tokens:
     token_dir = Path.home() / ".garminconnect"
     token_dir.mkdir(parents=True, exist_ok=True)
-    (token_dir / "garmin_tokens.json").write_text(garmin_tokens.strip())
+    (token_dir / "garmin_tokens.json").write_text(garmin_tokens.strip().rstrip("%"))
     print("Garmin tokens written to ~/.garminconnect/garmin_tokens.json", file=sys.stderr)
 else:
     print("No GARMIN_TOKENS env var — using existing ~/.garminconnect on disk.", file=sys.stderr)
