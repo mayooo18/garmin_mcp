@@ -1,6 +1,5 @@
 import os
 import sys
-from pathlib import Path
 from dotenv import load_dotenv
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
@@ -9,15 +8,15 @@ import uvicorn
 
 load_dotenv()
 
-# Write Garmin tokens from environment variable to filesystem
-# This allows Render to authenticate without interactive MFA
-garmin_tokens = os.environ.get("GARMIN_TOKENS")
+# Inject Garmin tokens from env var so garminconnect can load them directly.
+# garminconnect reads GARMINTOKENS; if the value is >512 chars it calls
+# client.loads() (in-memory) instead of trying to read from the filesystem.
+garmin_tokens = os.environ.get("GARMIN_TOKENS") or os.environ.get("GARMINTOKENS")
 if garmin_tokens:
-    token_dir = Path.home() / ".garminconnect"
-    token_dir.mkdir(parents=True, exist_ok=True)
-    token_file = token_dir / "garmin_tokens.json"
-    token_file.write_text(garmin_tokens)
-    print("Garmin tokens written to filesystem.", file=sys.stderr)
+    os.environ["GARMINTOKENS"] = garmin_tokens  # garminconnect's expected var name
+    print("Garmin tokens loaded from environment.", file=sys.stderr)
+else:
+    print("No GARMIN_TOKENS env var found — will try ~/.garminconnect on disk.", file=sys.stderr)
 
 # --- Garmin init (mirrors the logic in garmin_mcp/__init__.py) ---
 from garmin_mcp import (
