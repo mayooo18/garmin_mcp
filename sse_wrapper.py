@@ -1,0 +1,32 @@
+import os
+from dotenv import load_dotenv
+from starlette.applications import Starlette
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import JSONResponse
+from starlette.routing import Route
+from mcp.server.sse import SseServerTransport
+import uvicorn
+
+load_dotenv()
+
+# Load garmin_mcp's server then register your custom tools on top
+from garmin_mcp.server import mcp as garmin_server
+from custom.registry import register_custom_tools
+
+register_custom_tools(garmin_server)
+
+MCP_API_KEY = os.environ.get("MCP_API_KEY", "")
+
+class APIKeyMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        if MCP_API_KEY and request.headers.get("X-API-Key") != MCP_API_KEY:
+            return JSONResponse({"error": "Unauthorized"}, status_code=401)
+        return await call_next(request)
+
+transport = SseServerTransport("/sse")
+app = Starlette(routes=[Route("/sse", transport.handle_sse)])
+app.add_middleware(APIKeyMiddleware)
+transport.attach(garmin_server, app)
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 8000)))
