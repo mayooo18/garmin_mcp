@@ -1,12 +1,10 @@
 import os
-import json
+import sys
 from pathlib import Path
 from dotenv import load_dotenv
-from starlette.applications import Starlette
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
-from starlette.routing import Route
-from mcp.server.sse import SseServerTransport
+from mcp.server.fastmcp import FastMCP
 import uvicorn
 
 load_dotenv()
@@ -19,15 +17,73 @@ if garmin_tokens:
     token_dir.mkdir(parents=True, exist_ok=True)
     token_file = token_dir / "garmin_tokens.json"
     token_file.write_text(garmin_tokens)
-    print("Garmin tokens written to filesystem.")
+    print("Garmin tokens written to filesystem.", file=sys.stderr)
 
-# Load garmin_mcp's server then register your custom tools on top
-from garmin_mcp.server import mcp as garmin_server
+# --- Garmin init (mirrors the logic in garmin_mcp/__init__.py) ---
+from garmin_mcp import (
+    init_api, email, password,
+    activity_management, health_wellness, user_profile, devices,
+    gear_management, weight_management, challenges, training,
+    workouts, workout_templates, data_management, womens_health,
+    nutrition, workout_builders, courses, activity_analysis,
+)
 from custom.registry import register_custom_tools
 
-register_custom_tools(garmin_server)
+garmin_client = init_api(email, password)
+if not garmin_client:
+    print("Failed to initialize Garmin Connect client. Exiting.", file=sys.stderr)
+    sys.exit(1)
 
+# Configure every module with the authenticated client
+activity_management.configure(garmin_client)
+health_wellness.configure(garmin_client)
+user_profile.configure(garmin_client)
+devices.configure(garmin_client)
+gear_management.configure(garmin_client)
+weight_management.configure(garmin_client)
+challenges.configure(garmin_client)
+training.configure(garmin_client)
+workouts.configure(garmin_client)
+data_management.configure(garmin_client)
+womens_health.configure(garmin_client)
+nutrition.configure(garmin_client)
+workout_builders.configure(garmin_client)
+courses.configure(garmin_client)
+activity_analysis.configure(garmin_client)
+
+# --- Build the MCP server ---
+PORT = int(os.environ.get("PORT", 8000))
+
+mcp = FastMCP(
+    "Garmin Fitness Assistant",
+    host="0.0.0.0",
+    port=PORT,
+)
+
+# Register all garmin_mcp tools
+mcp = activity_management.register_tools(mcp)
+mcp = health_wellness.register_tools(mcp)
+mcp = user_profile.register_tools(mcp)
+mcp = devices.register_tools(mcp)
+mcp = gear_management.register_tools(mcp)
+mcp = weight_management.register_tools(mcp)
+mcp = challenges.register_tools(mcp)
+mcp = training.register_tools(mcp)
+mcp = workouts.register_tools(mcp)
+mcp = data_management.register_tools(mcp)
+mcp = womens_health.register_tools(mcp)
+mcp = nutrition.register_tools(mcp)
+mcp = workout_builders.register_tools(mcp)
+mcp = courses.register_tools(mcp)
+mcp = activity_analysis.register_tools(mcp)
+mcp = workout_templates.register_resources(mcp)
+
+# Register custom tools (profile, calories, recovery, marathon)
+register_custom_tools(mcp)
+
+# --- Optional API-key protection ---
 MCP_API_KEY = os.environ.get("MCP_API_KEY", "")
+
 
 class APIKeyMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request, call_next):
@@ -35,10 +91,12 @@ class APIKeyMiddleware(BaseHTTPMiddleware):
             return JSONResponse({"error": "Unauthorized"}, status_code=401)
         return await call_next(request)
 
-transport = SseServerTransport("/sse")
-app = Starlette(routes=[Route("/sse", transport.handle_sse)])
-app.add_middleware(APIKeyMiddleware)
-transport.attach(garmin_server, app)
+
+# Build Starlette app from FastMCP and attach middleware
+app = mcp.sse_app()
+if MCP_API_KEY:
+    app.add_middleware(APIKeyMiddleware)
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 8000)))
+    print(f"Starting Garmin MCP SSE server on http://0.0.0.0:{PORT}/sse", file=sys.stderr)
+    uvicorn.run(app, host="0.0.0.0", port=PORT)
