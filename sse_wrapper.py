@@ -84,7 +84,7 @@ mcp = workout_templates.register_resources(mcp)
 register_custom_tools(mcp)
 
 # --- Optional API-key protection ---
-MCP_API_KEY = ""
+MCP_API_KEY = os.environ.get("MCP_API_KEY", "")
 
 
 class APIKeyMiddleware(BaseHTTPMiddleware):

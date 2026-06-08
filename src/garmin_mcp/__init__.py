@@ -117,17 +117,31 @@ def init_api(email, password):
             sys.stderr = old_stderr
 
     except (FileNotFoundError, GarminConnectConnectionError, GarminConnectTooManyRequestsError, GarminConnectAuthenticationError):
-        # Session is expired. You'll need to log in again
+        # Session is expired. Try an explicit DI token refresh before falling back to
+        # full credential login (which requires MFA and is often IP-rate-limited).
+        try:
+            print("Token load/validation failed — attempting DI token refresh...\n", file=sys.stderr)
+            temp = Garmin(is_cn=is_cn)
+            expanded = os.path.expanduser(tokenstore)
+            temp.client.load(expanded)
+            temp.client._refresh_di_token()
+            temp.client.dump(expanded)
+            print("DI token refreshed. Retrying login with fresh tokens...\n", file=sys.stderr)
+            garmin = Garmin(is_cn=is_cn)
+            garmin.login(tokenstore)
+            print("Login successful after token refresh.\n", file=sys.stderr)
+            return garmin
+        except Exception as refresh_err:
+            print(f"DI token refresh failed: {refresh_err}\n", file=sys.stderr)
 
         # Check if we're in a non-interactive environment without credentials
         if not is_interactive_terminal() and (not email or not password):
             print(
-                "ERROR: OAuth tokens not found and no interactive terminal available.\n"
-                "Please authenticate first:\n"
-                "  1. Run: garmin-mcp-auth\n"
-                "  2. Enter your credentials and MFA code\n"
-                "  3. Restart your MCP client\n"
-                f"Tokens will be saved to: {tokenstore}\n",
+                "ERROR: OAuth tokens invalid and refresh failed. No credentials available.\n"
+                "To fix:\n"
+                "  1. Run 'garmin-mcp-auth' locally to get fresh tokens\n"
+                "  2. Update GARMIN_TOKENS env var on Render with the new token JSON\n"
+                "  3. Redeploy\n",
                 file=sys.stderr,
             )
             return None
