@@ -89,8 +89,13 @@ MCP_API_KEY = os.environ.get("MCP_API_KEY", "")
 
 class APIKeyMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request, call_next):
-        if MCP_API_KEY and request.headers.get("X-API-Key") != MCP_API_KEY:
-            return JSONResponse({"error": "Unauthorized"}, status_code=401)
+        if MCP_API_KEY:
+            provided = (
+                request.headers.get("X-API-Key")
+                or request.query_params.get("key")
+            )
+            if provided != MCP_API_KEY:
+                return JSONResponse({"error": "Unauthorized"}, status_code=401)
         return await call_next(request)
 
 
